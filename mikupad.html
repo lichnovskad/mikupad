@@ -1349,47 +1349,50 @@ function normalizeEndpoint(endpoint, endpointAPI) {
 
 export async function getTokenCount({ endpoint, endpointAPI, endpointAPIKey, signal, ...options }) {
     endpoint = normalizeEndpoint(endpoint, endpointAPI);
-    switch (endpointAPI) {
-        case API_LLAMA_CPP:
-            return await llamaCppTokenCount({ endpoint, endpointAPIKey, signal, ...options });
-        case API_KOBOLD_CPP:
-            return await koboldCppTokenCount({ endpoint, endpointAPIKey, signal, ...options });
-        case API_OPENAI_COMPAT:
-            // 1. Check for official OpenAI or TogetherAI URLs and return an estimate immediately
-            if (new URL(endpoint).host === 'api.openai.com' || new URL(endpoint).host === 'api.together.xyz') {
-                // Estimate: roughly 1 token per 3 characters
-                return Math.ceil(options.content.length / 3); 
-            }
+    
+    try {
+        switch (endpointAPI) {
+            case API_LLAMA_CPP:
+                return await llamaCppTokenCount({ endpoint, endpointAPIKey, signal, ...options });
+            case API_KOBOLD_CPP:
+                return await koboldCppTokenCount({ endpoint, endpointAPIKey, signal, ...options });
+            case API_OPENAI_COMPAT:
+                // If official OpenAI, return estimate immediately
+                if (new URL(endpoint).host === 'api.openai.com' || new URL(endpoint).host === 'api.together.xyz') {
+                    return Math.ceil(options.content.length / 3); 
+                }
 
-            // 2. Try to detect specific local backends (Aphrodite, Ooba, Tabby)
-            // Note: The original code had a bug here where it might return -1 or crash on estimate fallback
-            let tokenCount = 0;
-            
-            // Helper to clean up the backend check results
-            const checkBackend = async (fn) => {
-                try {
-                    const result = await fn({ endpoint, endpointAPIKey, signal, ...options });
-                    // Only accept positive integers
-                    return (result !== -1 && !isNaN(result)) ? result : null;
-                } catch { return null; }
-            };
+                // Try to detect specific local backends
+                let tokenCount = null;
+                
+                // Helper to safely call backend functions
+                const safelyCall = async (fn) => {
+                    try {
+                        const res = await fn({ endpoint, endpointAPIKey, signal, ...options });
+                        return (typeof res === 'number' && res >= 0) ? res : null;
+                    } catch { return null; }
+                };
 
-            tokenCount = await checkBackend(openaiAphroditeTokenCount);
-            if (tokenCount !== null) return tokenCount;
+                tokenCount = await safelyCall(openaiAphroditeTokenCount);
+                if (tokenCount !== null) return tokenCount;
 
-            tokenCount = await checkBackend(openaiOobaTokenCount);
-            if (tokenCount !== null) return tokenCount;
+                tokenCount = await safelyCall(openaiOobaTokenCount);
+                if (tokenCount !== null) return tokenCount;
 
-            tokenCount = await checkBackend(openaiTabbyTokenCount);
-            if (tokenCount !== null) return tokenCount;
+                tokenCount = await safelyCall(openaiTabbyTokenCount);
+                if (tokenCount !== null) return tokenCount;
 
-            // 3. Fallback: If no specific backend is detected, return an estimate
-            return Math.ceil(options.content.length / 3);
-
-        default:
-            return 0;
+                // Fallback estimate for generic OpenAI backends
+                return Math.ceil(options.content.length / 3);
+            default:
+                return 0;
+        }
+    } catch (e) {
+        // GLOBAL FALLBACK: If anything crashes or fails (network error, etc), return estimate
+        return Math.ceil(options.content.length / 3);
     }
 }
+
 
 export async function getTokens({ endpoint, endpointAPI, endpointAPIKey, signal, ...options }) {
 	// currently only implemented for llama.cpp and koboldcpp
