@@ -1782,7 +1782,7 @@ async function openaiAphroditeTokenCount({ endpoint, endpointAPIKey, proxyEndpoi
 		const tokens = await res.json();
 		return tokens.length;
 	} catch (e) {
-		return -1;
+		return Math.ceil(a.content.length/3.3);
 	}
 }
 
@@ -1804,7 +1804,7 @@ async function openaiOobaTokenCount({ endpoint, proxyEndpoint, signal, ...option
 		const { length } = await res.json();
 		return length;
 	} catch (e) {
-		return -1;
+		return Math.ceil(a.content.length/3.3);
 	}
 }
 
@@ -1827,7 +1827,7 @@ async function openaiTabbyTokenCount({ endpoint, endpointAPIKey, proxyEndpoint, 
 		const tokens = await res.json();
 		return tokens.length;
 	} catch (e) {
-		return -1;
+		return Math.ceil(a.content.length/3.3);
 	}
 }
 
@@ -9409,4 +9409,5 @@ async function main() {
 
 main();
 </script>
+
 
