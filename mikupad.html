@@ -1348,33 +1348,47 @@ function normalizeEndpoint(endpoint, endpointAPI) {
 }
 
 export async function getTokenCount({ endpoint, endpointAPI, endpointAPIKey, signal, ...options }) {
-	endpoint = normalizeEndpoint(endpoint, endpointAPI);
-	switch (endpointAPI) {
-		case API_LLAMA_CPP:
-			return await llamaCppTokenCount({ endpoint, endpointAPIKey, signal, ...options });
-		case API_KOBOLD_CPP:
-			return await koboldCppTokenCount({ endpoint, endpointAPIKey, signal, ...options });
-		case API_OPENAI_COMPAT:
-			// These endpoints don't have a token count endpoint...
-			if (new URL(endpoint).host === 'api.openai.com' || new URL(endpoint).host === 'api.together.xyz')
-				return 0;
+    endpoint = normalizeEndpoint(endpoint, endpointAPI);
+    switch (endpointAPI) {
+        case API_LLAMA_CPP:
+            return await llamaCppTokenCount({ endpoint, endpointAPIKey, signal, ...options });
+        case API_KOBOLD_CPP:
+            return await koboldCppTokenCount({ endpoint, endpointAPIKey, signal, ...options });
+        case API_OPENAI_COMPAT:
+            // 1. Check for official OpenAI or TogetherAI URLs and return an estimate immediately
+            if (new URL(endpoint).host === 'api.openai.com' || new URL(endpoint).host === 'api.together.xyz') {
+                // Estimate: roughly 1 token per 3 characters
+                return Math.ceil(options.content.length / 3); 
+            }
 
-			// Each backend that exposes an OpenAI-compatible API may have a different token count endpoint.
-			// Instead of asking the user which backend they are using, let's try each one.
-			let tokenCount = 0;
-			tokenCount = await openaiAphroditeTokenCount({ endpoint, endpointAPIKey, signal, ...options });
-			if (tokenCount != -1)
-				return tokenCount;
-			tokenCount = await openaiOobaTokenCount({ endpoint, signal, ...options });
-			if (tokenCount != -1)
-				return tokenCount;
-			tokenCount = await openaiTabbyTokenCount({ endpoint, endpointAPIKey, signal, ...options });
-			if (tokenCount != -1)
-				return tokenCount;
-			return 0;
-		default:
-			return 0;
-	}
+            // 2. Try to detect specific local backends (Aphrodite, Ooba, Tabby)
+            // Note: The original code had a bug here where it might return -1 or crash on estimate fallback
+            let tokenCount = 0;
+            
+            // Helper to clean up the backend check results
+            const checkBackend = async (fn) => {
+                try {
+                    const result = await fn({ endpoint, endpointAPIKey, signal, ...options });
+                    // Only accept positive integers
+                    return (result !== -1 && !isNaN(result)) ? result : null;
+                } catch { return null; }
+            };
+
+            tokenCount = await checkBackend(openaiAphroditeTokenCount);
+            if (tokenCount !== null) return tokenCount;
+
+            tokenCount = await checkBackend(openaiOobaTokenCount);
+            if (tokenCount !== null) return tokenCount;
+
+            tokenCount = await checkBackend(openaiTabbyTokenCount);
+            if (tokenCount !== null) return tokenCount;
+
+            // 3. Fallback: If no specific backend is detected, return an estimate
+            return Math.ceil(options.content.length / 3);
+
+        default:
+            return 0;
+    }
 }
 
 export async function getTokens({ endpoint, endpointAPI, endpointAPIKey, signal, ...options }) {
@@ -1782,7 +1796,7 @@ async function openaiAphroditeTokenCount({ endpoint, endpointAPIKey, proxyEndpoi
 		const tokens = await res.json();
 		return tokens.length;
 	} catch (e) {
-		return Math.ceil(a.content.length/3.3);
+		return -1;
 	}
 }
 
@@ -1804,7 +1818,7 @@ async function openaiOobaTokenCount({ endpoint, proxyEndpoint, signal, ...option
 		const { length } = await res.json();
 		return length;
 	} catch (e) {
-		return Math.ceil(a.content.length/3.3);
+		return -1;
 	}
 }
 
@@ -1827,7 +1841,7 @@ async function openaiTabbyTokenCount({ endpoint, endpointAPIKey, proxyEndpoint, 
 		const tokens = await res.json();
 		return tokens.length;
 	} catch (e) {
-		return Math.ceil(a.content.length/3.3);
+		return -1;
 	}
 }
 
@@ -9409,5 +9423,6 @@ async function main() {
 
 main();
 </script>
+
 
 
