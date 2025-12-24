@@ -18,3 +18,4 @@ call npm install
 call npm start build
 copy /y .\dist\mikupad.html ..\mikupad_compiled.html
 cd ..
+pause

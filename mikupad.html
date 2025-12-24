@@ -208,17 +208,17 @@ body {
 	overflow: hidden;
 }
 
-#prompt-container:hover #prompt-overlay > .machine {
-	background: color-mix(in srgb, var(--bg-color, var(--color-miku)) 10%, transparent);
+/* Changed: Text color for generated text instead of background highlight */
+#prompt-container #prompt-overlay > .machine {
+	color: var(--color-miku); /* Uses the theme's accent color */
 }
+
+/* Optional: Keep erase indication */
 #prompt-container #prompt-overlay > .machine.erase {
-	background: color-mix(in srgb, #FF0000 10%, transparent);
+	text-decoration: line-through;
+	color: #FF0000;
 }
-#prompt-container #prompt-overlay > .machine.current {
-	border-radius: 3px;
-	outline: 1px solid var(--color-bg-highlight-1);
-	outline-offset: 1px;
-}
+
 #prompt-container #prompt-overlay > .preview {
 	color: var(--color-text-prompt);
 	opacity: 40%;
@@ -235,32 +235,6 @@ body {
 	top: -2px;
 }
 
-#probs {
-	position: absolute;
-	background: var(--color-bg-popover-2);
-	top: var(--probs-top);
-	left: var(--probs-left);
-	display: flex;
-	transform: translate(-50%, -100%);
-	border-radius: 5px;
-	box-shadow: 0 1px 1px 1px #00000033;
-	z-index: 9999;
-
-	overflow-x: auto;
-	max-width: 99%;
-	scrollbar-width: thin;
-}
-#probs > button {
-	cursor: pointer;
-	background: transparent;
-	color: var(--color-text-ui);
-	border-radius: 0;
-	padding: calc(4px * var(--font-size-multiplier)) calc(8px * var(--font-size-multiplier));
-	display: flex;
-	flex-direction: column;
-	flex: none;
-	font-size: calc(1rem * var(--font-size-multiplier));
-}
 #probs > button.current {
 	background: var(--color-bg-highlight-1);
 }
@@ -277,9 +251,6 @@ body {
 }
 #probs > button:active {
 	background: var(--color-bg-highlight-2);
-}
-#probs > button > .prob {
-	font-size: calc(0.8rem * var(--font-size-multiplier));
 }
 
 .flexfiller {
@@ -3189,7 +3160,7 @@ function ContextModal({ isOpen, closeModal, tokens, memoryTokens, authorNoteToke
 				</thead>
 				<tbody>
 					<tr>
-						<th>Tokens</th>
+						<th>Tokens Estimate</th>
 						<td>${memoryTokens.tokens}</td>
 						<td>${memoryTokens.tokensWI}</td>
 						<td>${authorNoteTokens.tokens}</td>
@@ -6506,16 +6477,10 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 	const [templateList, setTemplateList] = useState([]);
 	const [currentPromptChunk, setCurrentPromptChunk] = useState(undefined);
 	const [undoHovered, setUndoHovered] = useState(false);
-	const [showProbs, setShowProbs] = useState(true);
 	const [cancel, setCancel] = useState(null);
 	const [fontSizeMultiplier, setFontSizeMultiplier] = usePersistentState('fontSizeMult', 1.0);
 	const [spellCheck, setSpellCheck] = usePersistentState('spellCheck', false);
 	const [attachSidebar, setAttachSidebar] = usePersistentState('attachSidebar', false);
-	const [showProbsMode, setShowProbsMode] = usePersistentState('showProbsMode', 0);
-	const [__highlightGenTokens, __1] = usePersistentState('highlightGenTokens', true); // obsolete!
-	const [tokenHighlightMode, setTokenHighlightMode] = usePersistentState('tokenHighlightMode', __highlightGenTokens ? 0 : -1);
-	const [__colorizePerplexity, __2] = usePersistentState('colorizePerplexity', false); // obsolete!
-	const [tokenColorMode, setTokenColorMode] = usePersistentState('tokenColorMode', __colorizePerplexity ? 2 : 0);
 	const [preserveCursorPosition, setPreserveCursorPosition] = usePersistentState('preserveCursorPosition', true);
 	const [promptAreaWidth, setPromptAreaWidth] = usePersistentState('promptAreaWidth', undefined);
 	const [__theme, __3] = usePersistentState('theme', 0); // obsolete!
@@ -6859,12 +6824,11 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 	}
 
 	const toggleModal = (modalKey) => {
-		setShowProbs(false);
-		setModalState((prevState) => ({
-			...prevState,
-			[modalKey]: !prevState[modalKey],
-		}));
-	};
+			setModalState((prevState) => ({
+				...prevState,
+				[modalKey]: !prevState[modalKey],
+			}));
+		};
 	const closeModal = (modalKey) => {
 		setModalState((prevState) => ({
 			...prevState,
@@ -7067,7 +7031,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 		if (promptPreviewChunks.length) // Don't predict a new preview if we already have one.
 			return;
 		
-		if (fimPromptInfo !== undefined || cancel || endpointAPI == API_AI_HORDE || tokenHighlightMode === -1 || !showPromptPreview)
+		if (fimPromptInfo !== undefined || cancel || endpointAPI == API_AI_HORDE || !showPromptPreview)
 			return;
 
 		const ac = new AbortController();
@@ -7393,8 +7357,8 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 					} : {})
 				}),
 				n_predict: maxPredictTokens,
-				n_probs: 10,
-				...(endpointAPI === API_LLAMA_CPP ? { post_sampling_probs: postSamplingProbs } : {}),
+				n_probs: 0, // Disable logprobs request
+				// Removed post_sampling_probs logic
 				stream: useTokenStreaming,
 				...(stopParam.length ? { stop: stopParam } : {}),
 				signal: ac.signal,
@@ -7609,40 +7573,6 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 		}
 	}, [bannedTokens]);
 
-	useEffect(() => {
-		if (showProbsMode === -1 || tokenHighlightMode === -1)
-			return;
-
-		const adjustProbsPosition = () => {
-			const probsElement = document.getElementById('probs');
-			if (!probsElement) return;
-
-			probsElement.style.display = '';
-			probsElement.style.setProperty('--probs-top', `${currentPromptChunk.top}px`);
-			probsElement.style.setProperty('--probs-left', `${currentPromptChunk.left}px`);
-
-			const probsRect = probsElement.getBoundingClientRect();
-			const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-			const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-
-			// Adjust left position if element goes off-screen on the right
-			if (probsRect.right > viewportWidth) {
-				const newLeft = viewportWidth - probsRect.width / 2;
-				probsElement.style.setProperty('--probs-left', `${newLeft}px`);
-			}
-
-			// Adjust right position if element goes off-screen on the left
-			if (probsRect.left < 0) {
-				probsElement.style.setProperty('--probs-left', `${probsRect.width / 2}px`);
-			}
-		};
-
-		if (currentPromptChunk && showProbs) {
-			setTimeout(() => {
-				adjustProbsPosition();
-			});
-		}
-	}, [currentPromptChunk, showProbs]);
 
 	useEffect(() => {
 		const element = promptArea.current;
@@ -7823,7 +7753,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 		promptArea.current.scrollTarget = undefined;
 		promptArea.current.scrollTop = savedScrollTop;
 		promptOverlay.current.scrollTop = savedScrollTop;
-	}, [savedScrollTop, tokenHighlightMode, showProbsMode]);
+	}, [savedScrollTop]);
 
 	useEffect(() => {
 		if (cancel)
@@ -8173,15 +8103,6 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 		promptOverlay.current.scrollLeft = target.scrollLeft;
 		setSavedScrollTop(newTop);
 
-		if (showProbsMode !== -1) {
-			const probsElement = document.getElementById('probs');
-			if (probsElement) {
-				const probsTop = getComputedStyle(probsElement).getPropertyValue('top');
-				probsElement.style.setProperty('--probs-top', `calc(${probsTop} + ${oldTop - newTop}px)`);
-			} else if (currentPromptChunk) {
-				currentPromptChunk.top += oldTop - newTop;
-			}
-		}
 
 		if (showMarkdownPreview && markdownPreviewRef.current && !isSyncingScroll.current) {
 			isSyncingScroll.current = true;
@@ -8198,39 +8119,8 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 	}
 
 	function onPromptMouseMove({ clientX, clientY }) {
-		if (showProbsMode === -1 && tokenHighlightMode === -1)
-			return;
-		promptOverlay.current.style.pointerEvents = 'auto';
-		const elem = document.elementFromPoint(clientX, clientY);
-		const pc = elem?.closest?.('[data-promptchunk]');
-		const probs = elem?.closest?.('#probs');
-		promptOverlay.current.style.pointerEvents = 'none';
-		if (probs)
-			return;
-		if (!pc) {
-			setCurrentPromptChunk(undefined);
 			return;
 		}
-		const rect = [...pc.getClientRects()].at(-1);
-		const index = +pc.dataset.promptchunk;
-		const top = rect.top;
-		const left = rect.x + rect.width / 2;
-		setCurrentPromptChunk(cur => {
-			const isCurrent = cur && cur.index === index && cur.top === top && cur.left === left;
-			switch (showProbsMode) {
-				case 0:
-					if (!isCurrent || !showProbs) {
-						setShowProbs(false);
-						clearTimeout(probsDelayTimer.current);
-						probsDelayTimer.current = setTimeout(() => setShowProbs(true), 300);
-					}
-					break;
-				case 1:
-					setShowProbs(keyState.current.ctrlKey);
-			}
-			return isCurrent ? cur : { index, top, left };
-		});
-	}
 
 	async function switchCompletion(i, tok) {
 		const remainingPrompt = promptChunks.slice(i);
@@ -8334,13 +8224,6 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 			sessionStorage.removeEventListener('error', onSessionError);
 		};
 	}, []);
-
-	const probs = useMemo(() => {
-		const rawProbs = showProbs && promptChunks[currentPromptChunk?.index]?.completion_probabilities?.[0]?.probs;
-		return rawProbs
-			? rawProbs.filter(prob => prob.prob > 0).sort((a, b) => b.prob - a.prob)
-			: undefined;
-	}, [promptChunks, currentPromptChunk, showProbs]);
 
 	const sidebar = useRef(null);
 	const [sidebarHeight, setSidebarHeight] = useState(0);
@@ -8526,44 +8409,24 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 				id="prompt-overlay"
 				aria-hidden
 				...${showPromptPreview && { style: { 'padding-bottom': promptPreviewElement.current?.offsetHeight ?? '0px' } }}>
-				${tokenHighlightMode !== -1 ? html`
-					${promptChunks.map((chunk, i) => {
-						const getRatioColor = (ratio) => {
-							const sRatio = Math.max(0, Math.min(1, ratio));
-							if (sRatio <= 0.5) {
-								// Scale ratio from [0, 0.5] to [0, 1]
-								const adjustedRatio = sRatio / 0.5;
-								return `color-mix(in srgb, red ${100 - adjustedRatio * 100}%, yellow ${adjustedRatio * 100}%)`;
-							} else {
-								// Scale ratio from [0.5, 1] to [0, 1]
-								const adjustedRatio = (sRatio - 0.5) / 0.5;
-								return `color-mix(in srgb, yellow ${100 - adjustedRatio * 100}%, var(--color-miku) ${adjustedRatio * 100}%)`;
-							}
-						};
-						const chunkProb = chunk.prob ?? 1;
-						let bgColor = "";
-						if (tokenColorMode === 1 && chunkProb < 1) {
-							bgColor = getRatioColor(chunkProb);
-						} else if (tokenColorMode === 2 && chunkProb < 1) {
-							const chunkProbs = chunk.completion_probabilities?.[0]?.probs ?? [];
-							const minChunkProb = chunkProbs.length < 10 ? Math.min(...chunkProbs.map(p => p.prob)) : 0;
-							const maxChunkProb = chunkProbs.length > 0 ? Math.max(...chunkProbs.map(p => p.prob)) : 1;
-							bgColor = getRatioColor((chunkProb - minChunkProb) / (maxChunkProb - minChunkProb));
-						}
-						const isCurrent = currentPromptChunk && currentPromptChunk.index === i;
-						const isNextUndo = undoHovered && !!undoStack.current.length && undoStack.current.at(-1) <= i;
-						return html`
-							<span
-								key=${i}
-								data-promptchunk=${i}
-								style=${bgColor ? { '--bg-color': bgColor } : {}}
-								className=${`${(tokenHighlightMode === 1 && !isCurrent) || chunk.type === 'user' ? 'user' : 'machine'} ${isCurrent ? 'current' : ''} ${isNextUndo ? 'erase' : ''}`}>
-								${(chunk.content === '\n' ? ' \n' : chunk.content) + (i === promptChunks.length - 1 && chunk.content.endsWith('\n') && promptPreviewChunks.length === 0 ? '\u00a0' : '')}
-							</span>`;
-					})}
-					${(showPromptPreview && promptPreviewChunks.length) ? html`
-						<span ref=${promptPreviewElement} className="preview"></span>
-						<span class="preview nudge">Tab</span>` : null}` : null}
+				
+				${promptChunks.map((chunk, i) => {
+					// Simplified rendering: No probability color calculation
+					const isCurrent = currentPromptChunk && currentPromptChunk.index === i;
+					const isNextUndo = undoHovered && !!undoStack.current.length && undoStack.current.at(-1) <= i;
+					const isUser = chunk.type === 'user';
+					
+					return html`
+						<span
+							key=${i}
+							data-promptchunk=${i}
+							className=${`${isUser ? 'user' : 'machine'} ${isCurrent ? 'current' : ''} ${isNextUndo ? 'erase' : ''}`}>
+							${(chunk.content === '\n' ? ' \n' : chunk.content) + (i === promptChunks.length - 1 && chunk.content.endsWith('\n') && promptPreviewChunks.length === 0 ? '\u00a0' : '')}
+						</span>`;
+				})}
+				${(showPromptPreview && promptPreviewChunks.length) ? html`
+					<span ref=${promptPreviewElement} className="preview"></span>
+					<span class="preview nudge">Tab</span>` : null}
 			</div>
 			<${SearchAndReplaceWidget}
 				isOpen=${modalState.searchAndReplace}
@@ -8576,21 +8439,6 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 		<div id="markdown-preview" ref=${markdownPreviewRef} style=${{ 'margin-bottom': isMobile ? sidebarHeight + 'px' : 0 }}>
 			<div dangerouslySetInnerHTML=${{__html: markdownHtml}} />
 		</div>
-		${probs ? html`
-			<div
-				id="probs"
-				style=${{
-					'display': 'none'
-				}}>
-				${probs.map((prob, i) => {
-					const index = currentPromptChunk?.index;
-					const isCurrentToken = promptChunks[index]?.prob == prob.prob;
-					return html`<button key=${i} className=${isCurrentToken ? 'current' : ''} onClick=${() => switchCompletion(index, prob)}>
-						<div className="tok">${replaceUnprintableBytes(prob.tok_str.replaceAll(' ', '␣').replaceAll('\t', '⇥').replaceAll('\n', '↵'))}</div>
-						<div className="prob">${(prob.prob * 100).toFixed(2)}%</div>
-					</button>`;
-				})}
-			</div>` : null}
 		<div id="sidebar" ref=${sidebar} style=${{ 'max-height': ''}}>
 			<div className="buttons instructTemplateSidebar theme-selector">
 				<${SelectBox}
@@ -8678,7 +8526,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 					<${Checkbox} label="Token Streaming"
 						disabled=${!!cancel} value=${useTokenStreaming} onValueChange=${setUseTokenStreaming}/>
 					<${Checkbox} label="Prediction Preview"
-						disabled=${!!cancel || tokenHighlightMode === -1} value=${showPromptPreview && tokenHighlightMode !== -1} onValueChange=${setShowPromptPreview}/>
+						disabled=${!!cancel} value=${showPromptPreview} onValueChange=${setShowPromptPreview}/>
 					${showPromptPreview && html`
 						<${InputBox} label="Max Preview Tokens" type="text" inputmode="numeric"
 							readOnly=${!!cancel} value=${promptPreviewTokens} onValueChange=${setPromptPreviewTokens}/>`}`}
@@ -9096,34 +8944,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 				value=${attachSidebar} onValueChange=${setAttachSidebar}/>
 			<${Checkbox} label="Preserve cursor position after prediction (disabled in Chat Mode)"
 				value=${preserveCursorPosition} onValueChange=${setPreserveCursorPosition}/>
-			<${SelectBox}
-				label="Token highlight"
-				value=${tokenHighlightMode}
-				onValueChange=${setTokenHighlightMode}
-				options=${[
-					{ name: 'Show on editor hover', value: 0 },
-					{ name: 'Show on token hover', value: 1 },
-					{ name: 'Hide', value: -1 },
-				]}/>
-			${tokenHighlightMode !== -1 && html`
-				<${SelectBox}
-					label="Token highlight color"
-					value=${tokenColorMode}
-					onValueChange=${setTokenColorMode}
-					options=${[
-						{ name: 'Default', value: 0 },
-						{ name: 'Color by probability', value: 1 },
-						{ name: 'Color by perplexity', value: 2 },
-					]}/>
-				<${SelectBox}
-					label="Token probability display"
-					value=${showProbsMode}
-					onValueChange=${setShowProbsMode}
-					options=${[
-						{ name: 'Show on hover', value: 0 },
-						{ name: 'Show on hover while holding CTRL', value: 1 },
-						{ name: 'Hide', value: -1 },
-					]}/>`}
+
 			${!isMikupadEndpoint && html`
 				<div style=${{ display: 'flex', justifyContent: 'space-evenly' }}>
 					<button onClick=${handleExportDB}>
