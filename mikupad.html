@@ -1358,7 +1358,7 @@ export async function getTokenCount({ endpoint, endpointAPI, endpointAPIKey, sig
 
                 // Fallback estimate for generic OpenAI backends
                 return Math.ceil(options.content.length / 3);
-            case API_OPENROUTER:
+            case API_OPENROUTER://idk
             	return Math.ceil(options.content.length / 3);
             default:
                 return 0;
@@ -1396,7 +1396,7 @@ export async function getTokens({ endpoint, endpointAPI, endpointAPIKey, signal,
 			if (tokens !== null)
 				return tokens;
 			return [];
-		case API_OPENROUTER:
+		case API_OPENROUTER://idk
 			return [];
 		default:
 			return [];
@@ -1411,7 +1411,7 @@ export async function getModels({ endpoint, endpointAPI, endpointAPIKey, signal,
 			return await openaiModels({ endpoint, endpointAPIKey, signal, ...options });
 		case API_AI_HORDE:
 			return await aiHordeModels({ endpoint, endpointAPIKey, signal, ...options });
-		case API_OPENROUTER: // ADD THIS
+		case API_OPENROUTER:
 			return await openRouterModels({ endpoint, endpointAPIKey, signal, ...options });
 		default:
 			return [];
@@ -1428,7 +1428,7 @@ export async function* completion({ endpoint, endpointAPI, endpointAPIKey, signa
 		case API_KOBOLD_CPP:
 			return yield* await koboldCppCompletion({ endpoint, endpointAPIKey, signal, ...options });
 		case API_OPENAI_COMPAT:
-		case API_OPENROUTER: // ADD THIS
+		case API_OPENROUTER:
 			return yield* await openaiCompletion({ endpoint, endpointAPIKey, signal, ...options });
 		case API_AI_HORDE:
 			return yield* await aiHordeCompletion({ endpoint, endpointAPIKey, signal, ...options });
@@ -1439,7 +1439,7 @@ export async function* chatCompletion({ endpoint, endpointAPI, endpointAPIKey, s
 	endpoint = normalizeEndpoint(endpoint, endpointAPI);
 	switch (endpointAPI) {
 		case API_OPENAI_COMPAT:
-		case API_OPENROUTER: // ADD THIS
+		case API_OPENROUTER:
 			return yield* await openaiChatCompletion({ endpoint, endpointAPIKey, signal, ...options });
 	}
 }
@@ -3692,6 +3692,9 @@ function LogitBiasModal({ isOpen, closeModal, logitBias, setLogitBias, logitBias
 				koboldCppSetLogitBiasParams();
 				break;
 			case API_OPENAI_COMPAT:
+				openaiSetLogitBiasParams();
+				break;
+			case API_OPENROUTER: //idk
 				openaiSetLogitBiasParams();
 				break;
 		}
@@ -6856,7 +6859,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 		const assembled = authorNoteTokens.text && authorNoteTokens.text !== ""
 			? order.map(key => authorNoteTokens[key]).join("")
 			: "";	
-		if (assembled == "" || endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_OPENROUTER) {
+		if (assembled == "" || endpointAPI == API_OPENAI_COMPAT) {
 			setAuthorNoteTokens((prevauthorNoteTokens) => ({ ...prevauthorNoteTokens, "tokens": 0 }))
 			return
 		}
@@ -6866,7 +6869,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 				const tokenCount = await getTokenCount({
 					endpoint,
 					endpointAPI,
-					...(endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_OPENROUTER || endpointAPI == API_LLAMA_CPP ? { endpointAPIKey } : {}),
+					...(endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_LLAMA_CPP ? { endpointAPIKey } : {}),
 					content: `${replacePlaceholders(assembled,templateReplacements)}`,
 					signal: ac.signal,
 					...(isMikupadEndpoint ? { proxyEndpoint: sessionStorage.proxyEndpoint } : {})
@@ -6896,7 +6899,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 		const assembled = memoryTokens.text && memoryTokens.text !== ""
 			? order.map(key => memoryTokens[key]).join("")
 			: "";	
-		if (assembled == "" || endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_OPENROUTER){
+		if (assembled == "" || endpointAPI == API_OPENAI_COMPAT){
 			setMemoryTokens((prevMemoryTokens) => ({ ...prevMemoryTokens, "tokens": 0 }));
 			return
 		}
@@ -6907,7 +6910,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 				const tokenCount = await getTokenCount({
 					endpoint,
 					endpointAPI,
-					...(endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_OPENROUTER || endpointAPI == API_LLAMA_CPP ? { endpointAPIKey } : {}),
+					...(endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_LLAMA_CPP ? { endpointAPIKey } : {}),
 					content: `${replacePlaceholders(assembled,templateReplacements)}`,
 					signal: ac.signal,
 					...(isMikupadEndpoint ? { proxyEndpoint: sessionStorage.proxyEndpoint } : {})
@@ -6932,7 +6935,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 		const assembled = memoryTokens.worldInfo && memoryTokens.worldInfo !== ""
 			? [worldInfo.prefix,memoryTokens.worldInfo,worldInfo.suffix].join("")
 			: "";
-		if (assembled == "" || endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_OPENROUTER){
+		if (assembled == "" || endpointAPI == API_OPENAI_COMPAT ){
 			setMemoryTokens((prevMemoryTokens) => ({ ...prevMemoryTokens, "tokensWI": 0 }));
 			return
 		}
@@ -6943,7 +6946,7 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 				const tokenCount = await getTokenCount({
 					endpoint,
 					endpointAPI,
-					...(endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_OPENROUTER || endpointAPI == API_LLAMA_CPP ? { endpointAPIKey } : {}),
+					...(endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_LLAMA_CPP ? { endpointAPIKey } : {}),
 					content: `${replacePlaceholders(assembled,templateReplacements)}`,
 					signal: ac.signal,
 					...(isMikupadEndpoint ? { proxyEndpoint: sessionStorage.proxyEndpoint } : {})
