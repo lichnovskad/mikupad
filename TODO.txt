@@ -1,0 +1,13 @@
+# add thinking mode
+# redo the fuckass undo button/gen button
+# make the llm output color part of theme editor
+# fill-in-middle how does it work?
+# sort switch
+# openrouter doesnt have text completion? 
+#view entire prompt
+#view entire response
+
+#when moving around, the llm color is put over the text, i want it to be the text
+
+#save all responses
+#

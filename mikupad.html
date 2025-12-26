@@ -2336,6 +2336,45 @@ async function aiHordeAbortCompletion({ endpoint, proxyEndpoint, hordeTaskId, ..
 	}
 }
 
+async function* captureAPICall(apiFunction, params) {
+	const timestamp = new Date().toISOString();
+	const requestData = {
+		timestamp,
+		endpoint: params.endpoint,
+		method: apiFunction.name,
+		params: { ...params }
+	};
+	
+	setLastAPIRequest(requestData);
+	setLastAPIResponse(null);
+	
+	const response = [];
+	
+	try {
+		for await (const chunk of apiFunction(params)) {
+			response.push(chunk);
+			yield chunk;
+		}
+		
+		setLastAPIResponse({
+			timestamp,
+			success: true,
+			chunks: response,
+			fullResponse: response
+		});
+	} catch (error) {
+		setLastAPIResponse({
+			timestamp,
+			success: false,
+			error: error.toString(),
+			stack: error.stack
+		});
+		throw error;
+	}
+}
+
+
+
 function importSillyTavernWorldInfo(json, setWorldInfo, importBehavior) {
 	setWorldInfo(prevWorldInfo => {
 		let updatedEntries;
@@ -3256,6 +3295,102 @@ function ContextModal({ isOpen, closeModal, tokens, memoryTokens, authorNoteToke
 				class="expanded-text-area-settings"
 				id="context-area-settings" readOnly/>
 		</${Modal}>`;
+}
+
+function APIResponseModal({ isOpen, closeModal, request, response }) {
+	const [activeTab, setActiveTab] = useState('response');
+	
+	return html`
+		<${Modal} isOpen=${isOpen} onClose=${closeModal}
+			title="API Response Viewer"
+			style=${{ 'max-width': '90vw', 'width': '800px' }}>
+			<div style=${{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+				<button 
+					onClick=${() => setActiveTab('response')}
+					style=${{ 
+						background: activeTab === 'response' ? 'var(--color-bg-highlight-2)' : 'var(--color-bg-input-1)' 
+					}}>
+					Response
+				</button>
+				<button 
+					onClick=${() => setActiveTab('request')}
+					style=${{ 
+						background: activeTab === 'request' ? 'var(--color-bg-highlight-2)' : 'var(--color-bg-input-1)' 
+					}}>
+					Request
+				</button>
+			</div>
+			
+			<div style=${{ 
+				maxHeight: '60vh', 
+				overflow: 'auto',
+				background: 'var(--color-bg-prompt)',
+				padding: '1em',
+				borderRadius: '4px',
+				fontFamily: 'monospace',
+				fontSize: '0.9em'
+			}}>
+				${activeTab === 'response' && response && html`
+					<div>
+						<strong>Timestamp:</strong> ${response.timestamp}<br/>
+						<strong>Status:</strong> ${response.success ? '✓ Success' : '✗ Error'}<br/>
+						${response.success ? html`
+							<strong>Total Chunks:</strong> ${response.chunks?.length || 0}<br/>
+							<hr style=${{ margin: '1em 0' }}/>
+							<pre style=${{ 
+								whiteSpace: 'pre-wrap', 
+								wordWrap: 'break-word',
+								margin: 0 
+							}}>${JSON.stringify(response.fullResponse, null, 2)}</pre>
+						` : html`
+							<strong>Error:</strong> ${response.error}<br/>
+							<hr style=${{ margin: '1em 0' }}/>
+							<pre style=${{ 
+								whiteSpace: 'pre-wrap',
+								wordWrap: 'break-word',
+								margin: 0,
+								color: '#ff8080'
+							}}>${response.stack}</pre>
+						`}
+					</div>
+				`}
+				
+				${activeTab === 'request' && request && html`
+					<div>
+						<strong>Timestamp:</strong> ${request.timestamp}<br/>
+						<strong>Endpoint:</strong> ${request.endpoint}<br/>
+						<strong>Method:</strong> ${request.method}<br/>
+						<hr style=${{ margin: '1em 0' }}/>
+						<pre style=${{ 
+							whiteSpace: 'pre-wrap',
+							wordWrap: 'break-word',
+							margin: 0
+						}}>${JSON.stringify(request.params, null, 2)}</pre>
+					</div>
+				`}
+				
+				${!request && !response && html`
+					<div style=${{ textAlign: 'center', padding: '2em', color: 'var(--color-text-hint)' }}>
+						No API calls captured yet. Run a prediction to see the API request and response.
+					</div>
+				`}
+			</div>
+			
+			<div style=${{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+				<button onClick=${() => {
+					const data = activeTab === 'response' ? response : request;
+					if (data) {
+						exportText(
+							`mikupad-api-${activeTab}-${new Date().toISOString()}.json`,
+							JSON.stringify(data, null, 2)
+						);
+					}
+				}} disabled=${!(activeTab === 'response' ? response : request)}>
+					Export ${activeTab === 'response' ? 'Response' : 'Request'}
+				</button>
+			</div>
+		</${Modal}>
+	`;
 }
 
 function WorldInfoModal({ isOpen, closeModal, worldInfo, setWorldInfo, cancel, toggleModal, setSillyTarvernWorldInfoJSON }) {
@@ -6744,6 +6879,8 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 	const [instructModalState, setInstructModalState] = useState({});
 	const [hordeQueuePos, setHordeQueuePos] = useState(undefined);
 	const [hordeProcessing, setHordeProcessing] = useState(false);
+	const [lastAPIRequest, setLastAPIRequest] = useState(null);
+	const [lastAPIResponse, setLastAPIResponse] = useState(null);
 	const [useChatAPI, setUseChatAPI] = useSessionState('chatAPI', defaultPresets.chatAPI);
 	const [useTokenStreaming, setUseTokenStreaming] = useSessionState('tokenStreaming', defaultPresets.tokenStreaming);
 	const [postSamplingProbs, setPostSamplingProbs] = useSessionState('postSamplingProbs', true);
@@ -7352,6 +7489,43 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 		return messages;
 	}
 
+async function* captureAPICall(apiFunction, params) {
+	const timestamp = new Date().toISOString();
+	const requestData = {
+		timestamp,
+		endpoint: params.endpoint,
+		method: apiFunction.name,
+		params: { ...params }
+	};
+	
+	setLastAPIRequest(requestData);
+	setLastAPIResponse(null);
+	
+	const response = [];
+	
+	try {
+		for await (const chunk of apiFunction(params)) {
+			response.push(chunk);
+			yield chunk;
+		}
+		
+		setLastAPIResponse({
+			timestamp,
+			success: true,
+			chunks: response,
+			fullResponse: response
+		});
+	} catch (error) {
+		setLastAPIResponse({
+			timestamp,
+			success: false,
+			error: error.toString(),
+			stack: error.stack
+		});
+		throw error;
+	}
+}
+
 	async function predict(prompt = finalPromptText, chunkCount = promptChunks.length, callback = undefined, abortController = undefined, invalidatesUndo = false, customParams = {}) {
 		if (!abortController && cancel) {
 			cancel?.();
@@ -7479,7 +7653,9 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 			let startTime = 0;
 			setTokensPerSec(0.0);
 			
-			for await (const chunk of (useChatAPI ? chatCompletion : completion)({
+			for await (const chunk of captureAPICall(
+				useChatAPI ? chatCompletion : completion,
+				{	
 				endpoint,
 				endpointAPI,
 				...(endpointAPI == API_OPENAI_COMPAT || endpointAPI == API_OPENROUTER || endpointAPI == API_LLAMA_CPP || endpointAPI == API_AI_HORDE ? {
@@ -9075,6 +9251,14 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 					Show Context
 				</button>
 
+				<button
+					id="viewAPIResponse"
+					disabled=${!!cancel}
+					onClick=${() => toggleModal("apiResponse")}>
+					View API Response
+				</button>
+
+
 			</${CollapsibleGroup}>
 			${!!tokens && html`
 				<${InputBox} label="Tokens" value="${tokens}${tokensPerSec ? ` (${tokensPerSec.toFixed(2)} T/s)` : ``}" readOnly/>`}
@@ -9331,6 +9515,12 @@ export function App({ sessionStorage, templateStorage, themeStorage, useSessionS
 			endpointModel=${endpointModel}
 			setEndpointModel=${setEndpointModel}
 			cancel=${cancel}/>
+
+			<${APIResponseModal}
+				isOpen=${modalState.apiResponse}
+				closeModal=${() => closeModal("apiResponse")}
+				request=${lastAPIRequest}
+				response=${lastAPIResponse}/>
 
 		<${EditorContextMenu}
 			isOpen=${contextMenuState.visible}
